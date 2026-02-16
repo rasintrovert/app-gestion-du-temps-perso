@@ -1,0 +1,38 @@
+.focus-timer {
+  text-align: center;
+  padding: 1.5rem 0;
+}
+
+.timer-label {
+  font-size: 0.9rem;
+  color: #666;
+  margin: 0 0 0.25rem 0;
+}
+
+.timer-subject {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0 0 1rem 0;
+}
+
+.timer-display {
+  font-size: 3.5rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  margin: 1rem 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.timer-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin: 1.5rem 0;
+}
+
+.timer-progress {
+  font-size: 0.85rem;
+  color: #888;
+  margin: 1rem 0 0 0;
+}

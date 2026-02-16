@@ -1,0 +1,72 @@
+.session-generator h2 {
+  margin: 0 0 1rem 0;
+  font-size: 1.5rem;
+}
+
+.session-generator .back {
+  margin-bottom: 1.5rem;
+  background: none;
+  border: none;
+  color: #666;
+  padding: 0.25rem 0;
+}
+
+.session-generator .back:hover {
+  color: #1a1a1a;
+}
+
+.session-generator label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 1rem;
+}
+
+.session-generator label span {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #444;
+}
+
+.session-generator select {
+  padding: 0.6rem;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+  font-size: 1rem;
+  font-family: inherit;
+}
+
+.session-generator button.primary {
+  margin-top: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.plan-preview {
+  margin-top: 1.5rem;
+  padding: 1.25rem;
+  background: #f8f9fa;
+  border-radius: 12px;
+  border: 1px solid #eee;
+}
+
+.plan-preview h3 {
+  margin: 0 0 0.75rem 0;
+  font-size: 1.1rem;
+}
+
+.plan-preview ul {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem 0;
+  text-align: left;
+}
+
+.plan-preview li {
+  padding: 0.35rem 0;
+  border-bottom: 1px solid #eee;
+  font-size: 0.95rem;
+}
+
+.plan-preview li:last-child {
+  border-bottom: none;
+}
