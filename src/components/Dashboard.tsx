@@ -1,321 +1,284 @@
-import { useState, useEffect } from 'react'
-import type { WeekPlannerData, PlannedStudyBlock, TaskDeliverable, DailyChecklistItem } from '../types'
-import type { DashboardProps } from '../App'
-import {
-  getWeekStart,
-  getWeekPlanner,
-  saveWeekPlanner,
-  getFixedSchedule,
-  getSubjects,
-  getStudyMinutesThisWeek,
-  getSessionsCompletedThisWeek,
-  formatWeekRange,
-  getDayName,
-} from '../lib/storage'
-import './Dashboard.css'
+import { useEffect, useState } from 'react'
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
+import { Badge } from './ui/badge'
+import { Button } from './ui/button'
+import { DailyReminders } from './DailyReminders'
+import { Calendar, Clock, CheckCircle2, AlertCircle, Sparkles, TrendingUp } from 'lucide-react'
+import { Progress } from './ui/progress'
 
-export default function Dashboard({ onStartSession }: DashboardProps) {
-  const weekStart = getWeekStart()
-  const [planner, setPlanner] = useState<WeekPlannerData>(() => getWeekPlanner(weekStart))
-  const fixedSchedule = getFixedSchedule()
-  const subjects = getSubjects()
+interface Task {
+  id: string
+  title: string
+  priority: string
+  deadline: string | null
+  status: string
+  course: string
+}
+
+interface Stats {
+  totalHoursThisWeek: number
+  completedTasks: number
+  totalTasks: number
+  completionRate: number
+}
+
+interface Suggestion {
+  type: string
+  message: string
+  priority: string
+}
+
+interface DashboardProps {
+  onNavigate: (view: string) => void
+  apiBaseUrl: string
+  publicAnonKey: string
+}
+
+export function Dashboard({ onNavigate, apiBaseUrl, publicAnonKey }: DashboardProps) {
+  const [tasks, setTasks] = useState<Task[]>([])
+  const [stats, setStats] = useState<Stats | null>(null)
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([])
+  const [loading, setLoading] = useState(true)
+  const [hasSession, setHasSession] = useState(false)
 
   useEffect(() => {
-    setPlanner(getWeekPlanner(weekStart))
-  }, [weekStart])
+    fetchData()
+  }, [apiBaseUrl, publicAnonKey])
 
-  const save = (next: WeekPlannerData) => {
-    setPlanner(next)
-    saveWeekPlanner(weekStart, next)
+  const fetchData = async () => {
+    if (!apiBaseUrl) {
+      setLoading(false)
+      return
+    }
+    try {
+      const headers = {
+        Authorization: `Bearer ${publicAnonKey}`,
+        'Content-Type': 'application/json',
+      }
+
+      const sessionRes = await fetch(`${apiBaseUrl}/session/current`, { headers })
+      const sessionData = await sessionRes.json()
+      setHasSession(sessionData.success && sessionData.session !== null)
+
+      const tasksRes = await fetch(`${apiBaseUrl}/tasks`, { headers })
+      const tasksData = await tasksRes.json()
+
+      const statsRes = await fetch(`${apiBaseUrl}/stats`, { headers })
+      const statsData = await statsRes.json()
+
+      const suggestionsRes = await fetch(`${apiBaseUrl}/ai-suggestions`, { headers })
+      const suggestionsData = await suggestionsRes.json()
+
+      if (tasksData.success) {
+        const allTasks = tasksData.tasks || []
+        const urgentTasks = allTasks
+          .filter((t: Task) => t.status !== 'Terminé')
+          .sort((a: Task, b: Task) => {
+            const priorityOrder: Record<string, number> = { Élevé: 3, Moyen: 2, Faible: 1 }
+            return (priorityOrder[b.priority] ?? 0) - (priorityOrder[a.priority] ?? 0)
+          })
+          .slice(0, 5)
+        setTasks(urgentTasks)
+      }
+
+      if (statsData.success) setStats(statsData.stats)
+      if (suggestionsData.success) setSuggestions(suggestionsData.suggestions || [])
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error)
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const updatePriorities = (index: number, title: string) => {
-    const prio = [...planner.priorities]
-    while (prio.length <= index) prio.push({ id: crypto.randomUUID(), title: '', order: prio.length })
-    prio[index] = { ...prio[index], title, order: index }
-    save({ ...planner, priorities: prio })
+  const getPriorityColor = (priority: string) => {
+    switch (priority) {
+      case 'Élevé':
+        return 'bg-red-100 text-red-700 border-red-200'
+      case 'Moyen':
+        return 'bg-yellow-100 text-yellow-700 border-yellow-200'
+      case 'Faible':
+        return 'bg-green-100 text-green-700 border-green-200'
+      default:
+        return 'bg-gray-100 text-gray-700 border-gray-200'
+    }
   }
 
-  const toggleStudyBlock = (id: string) => {
-    save({
-      ...planner,
-      studyBlocks: planner.studyBlocks.map((b) =>
-        b.id === id ? { ...b, completed: !b.completed } : b
-      ),
-    })
+  const getSuggestionIcon = (type: string) => {
+    switch (type) {
+      case 'urgent':
+        return <AlertCircle className="h-5 w-5 text-red-500" />
+      case 'priority':
+        return <TrendingUp className="h-5 w-5 text-yellow-500" />
+      case 'encouragement':
+        return <CheckCircle2 className="h-5 w-5 text-green-500" />
+      default:
+        return <Sparkles className="h-5 w-5 text-blue-500" />
+    }
   }
 
-  const updateStudyBlockLabel = (id: string, label: string) => {
-    save({
-      ...planner,
-      studyBlocks: planner.studyBlocks.map((b) => (b.id === id ? { ...b, label } : b)),
-    })
+  if (loading) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <div className="text-gray-500">Chargement...</div>
+      </div>
+    )
   }
-
-  const toggleTask = (id: string) => {
-    save({
-      ...planner,
-      tasks: planner.tasks.map((t) => (t.id === id ? { ...t, completed: !t.completed } : t)),
-    })
-  }
-
-  const updateTaskText = (id: string, text: string) => {
-    save({
-      ...planner,
-      tasks: planner.tasks.map((t) => (t.id === id ? { ...t, text } : t)),
-    })
-  }
-
-  const toggleDailyChecklist = (id: string) => {
-    save({
-      ...planner,
-      dailyChecklist: planner.dailyChecklist.map((c) =>
-        c.id === id ? { ...c, completed: !c.completed } : c
-      ),
-    })
-  }
-
-  const updateReview = (field: keyof typeof planner.review, value: string) => {
-    save({ ...planner, review: { ...planner.review, [field]: value } })
-  }
-
-  const updateCompass = (field: keyof typeof planner.compass, value: string | number) => {
-    save({
-      ...planner,
-      compass: { ...planner.compass, [field]: value },
-    })
-  }
-
-  const updateEnergy = (field: keyof typeof planner.energyBalance, value: string | number) => {
-    save({
-      ...planner,
-      energyBalance: { ...planner.energyBalance, [field]: value },
-    })
-  }
-
-  const minutesThisWeek = getStudyMinutesThisWeek()
-  const hoursThisWeek = (minutesThisWeek / 60).toFixed(1)
-  const sessionsCompleted = getSessionsCompletedThisWeek()
-  const goalHours = planner.compass.minStudyHoursGoal || 0
-  const focusRate = sessionsCompleted > 0 ? Math.min(100, Math.round((sessionsCompleted / (sessionsCompleted + 2)) * 100)) : 0
-
-  const scheduleByDay = Array.from({ length: 7 }, (_, i) => ({
-    day: i,
-    name: getDayName(i),
-    items: fixedSchedule.filter((f) => f.day === i),
-  }))
 
   return (
-    <div className="dashboard">
-      <header className="dashboard-header">
-        <h1>Weekly Planner (Feb–May)</h1>
-        <p className="week-range">Week of: {formatWeekRange(weekStart)}</p>
-      </header>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold text-gray-800">Tableau de bord</h1>
+        <p className="mt-1 text-gray-500">
+          {new Date().toLocaleDateString('fr-FR', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+          })}
+        </p>
+      </div>
 
-      {/* Top 3 Priorities */}
-      <section className="dashboard-section priorities-section">
-        <h2>📌 This week's priorities (Top 3)</h2>
-        <ul className="priorities-list">
-          {[0, 1, 2].map((i) => (
-            <li key={i}>
-              <input
-                type="text"
-                value={planner.priorities[i]?.title ?? ''}
-                onChange={(e) => updatePriorities(i, e.target.value)}
-                placeholder={`Priority ${i + 1}`}
-              />
-            </li>
-          ))}
-        </ul>
-      </section>
+      <DailyReminders onViewPlanner={() => onNavigate('calendar')} />
 
-      {/* Fixed schedule */}
-      <section className="dashboard-section">
-        <h2>Fixed schedule (classes + commitments)</h2>
-        <div className="fixed-schedule">
-          {scheduleByDay.map(({ day, name, items }) => (
-            <div key={day} className="schedule-day">
-              <h3>{name}</h3>
-              {items.length === 0 ? (
-                <p className="muted">{day === 6 ? 'Weekly reset (planning + light review)' : 'No classes'}</p>
-              ) : (
-                <ul>
-                  {items.map((item) => (
-                    <li key={item.id}>
-                      {item.startTime.slice(0, 5)}–{item.endTime.slice(0, 5)} — {item.label}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Study time blocks */}
-      <section className="dashboard-section">
-        <h2>Study time blocks (plan your week)</h2>
-        <p className="aside">⏱️ Fill these in with realistic blocks (e.g. "Tue 10:00–12:00 Data Structures practice").</p>
-        <div className="study-blocks-by-subject">
-          {subjects.map((subj) => {
-            const blocks = planner.studyBlocks.filter((b) => b.subjectId === subj.id)
-            return (
-              <div key={subj.id} className="subject-blocks">
-                <h3>{subj.name}</h3>
-                <ul>
-                  {blocks.map((b) => (
-                    <li key={b.id} className="block-row">
-                      <input
-                        type="checkbox"
-                        checked={b.completed}
-                        onChange={() => toggleStudyBlock(b.id)}
-                        aria-label="Completed"
-                      />
-                      <input
-                        type="text"
-                        className="block-label"
-                        value={b.label}
-                        onChange={(e) => updateStudyBlockLabel(b.id, e.target.value)}
-                        placeholder="Study block:"
-                      />
-                    </li>
-                  ))}
-                </ul>
+      {!hasSession && (
+        <Card className="border-2 border-purple-300 bg-gradient-to-r from-purple-50 to-pink-50">
+          <CardContent className="pt-6">
+            <div className="flex items-start gap-4">
+              <div className="text-4xl">👋</div>
+              <div className="flex-1">
+                <h3 className="mb-2 text-lg font-bold text-purple-900">Bienvenue sur StudyFlow!</h3>
+                <p className="mb-3 text-gray-700">
+                  Pour commencer, configure ta session académique actuelle et ajoute tes cours avec leurs horaires.
+                </p>
+                <Button onClick={() => onNavigate('settings')} className="bg-purple-600 hover:bg-purple-700">
+                  Configurer ma session
+                </Button>
               </div>
-            )
-          })}
-        </div>
-      </section>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
-      {/* Tasks & deliverables */}
-      <section className="dashboard-section">
-        <h2>Tasks & deliverables (this week)</h2>
-        <ul className="tasks-list">
-          {planner.tasks.map((t) => {
-            const subj = subjects.find((s) => s.id === t.subjectId)
-            return (
-              <li key={t.id} className="task-row">
-                <input
-                  type="checkbox"
-                  checked={t.completed}
-                  onChange={() => toggleTask(t.id)}
-                  aria-label="Done"
-                />
-                <input
-                  type="text"
-                  value={t.text}
-                  onChange={(e) => updateTaskText(t.id, e.target.value)}
-                  placeholder={subj?.name + ':'}
-                />
-              </li>
-            )
-          })}
-        </ul>
-      </section>
+      {suggestions.length > 0 && (
+        <Card className="border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-blue-900">
+              <Sparkles className="h-5 w-5" />
+              Assistant AI
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {suggestions.map((suggestion, index) => (
+              <div key={index} className="flex items-start gap-3 rounded-lg bg-white/60 p-3">
+                {getSuggestionIcon(suggestion.type)}
+                <p className="flex-1 text-sm text-gray-700">{suggestion.message}</p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
-      {/* Quick daily checklist */}
-      <section className="dashboard-section">
-        <h2>Quick daily checklist</h2>
-        <ul className="daily-checklist">
-          {planner.dailyChecklist.map((c) => (
-            <li key={c.id}>
-              <input
-                type="checkbox"
-                checked={c.completed}
-                onChange={() => toggleDailyChecklist(c.id)}
-              />
-              <span>{c.text}</span>
-            </li>
-          ))}
-        </ul>
-      </section>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500">Heures d'étude</p>
+                <p className="text-2xl font-bold text-blue-600">{stats?.totalHoursThisWeek ?? 0}h</p>
+                <p className="mt-1 text-xs text-gray-500">Cette semaine</p>
+              </div>
+              <Clock className="h-10 w-10 text-blue-200" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500">Tâches complétées</p>
+                <p className="text-2xl font-bold text-green-600">
+                  {stats?.completedTasks ?? 0}/{stats?.totalTasks ?? 0}
+                </p>
+                <Progress value={stats?.completionRate ?? 0} className="mt-2 h-2" />
+              </div>
+              <CheckCircle2 className="h-10 w-10 text-green-200" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500">Taux de complétion</p>
+                <p className="text-2xl font-bold text-purple-600">{stats?.completionRate ?? 0}%</p>
+                <p className="mt-1 text-xs text-gray-500">Performance globale</p>
+              </div>
+              <TrendingUp className="h-10 w-10 text-purple-200" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
-      {/* Academic Compass + Generate Study Day + Progress */}
-      <section className="dashboard-section compass-section">
-        <h2>🎯 Academic Compass</h2>
-        <div className="compass-fields">
-          <label>
-            Main focus subject this week:
-            <select
-              value={planner.compass.mainFocusSubjectId}
-              onChange={(e) => updateCompass('mainFocusSubjectId', e.target.value)}
-            >
-              <option value="">—</option>
-              {subjects.map((s) => (
-                <option key={s.id} value={s.id}>{s.name}</option>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            <span>Tâches prioritaires</span>
+            <Button variant="outline" size="sm" onClick={() => onNavigate('kanban')}>
+              Voir tout
+            </Button>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {tasks.length === 0 ? (
+            <div className="py-8 text-center text-gray-500">
+              <CheckCircle2 className="mx-auto mb-2 h-12 w-12 text-gray-300" />
+              <p>Aucune tâche urgente. Bien joué!</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {tasks.map((task) => (
+                <div
+                  key={task.id}
+                  className="flex items-start justify-between rounded-lg bg-gray-50 p-3 transition-colors hover:bg-gray-100"
+                >
+                  <div className="flex-1">
+                    <p className="font-medium text-gray-800">{task.title}</p>
+                    <div className="mt-1 flex items-center gap-2">
+                      <span className="text-xs text-gray-500">{task.course}</span>
+                      {task.deadline && (
+                        <span className="flex items-center gap-1 text-xs text-gray-500">
+                          <Calendar className="h-3 w-3" />
+                          {new Date(task.deadline).toLocaleDateString('fr-FR')}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <Badge className={getPriorityColor(task.priority)} variant="outline">
+                    {task.priority}
+                  </Badge>
+                </div>
               ))}
-            </select>
-          </label>
-          <label>
-            Most difficult subject:
-            <select
-              value={planner.compass.mostDifficultSubjectId}
-              onChange={(e) => updateCompass('mostDifficultSubjectId', e.target.value)}
-            >
-              <option value="">—</option>
-              {subjects.map((s) => (
-                <option key={s.id} value={s.id}>{s.name}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Minimum study hours goal:
-            <input
-              type="number"
-              min={0}
-              step={0.5}
-              value={planner.compass.minStudyHoursGoal || ''}
-              onChange={(e) => updateCompass('minStudyHoursGoal', parseFloat(e.target.value) || 0)}
-            />
-            h
-          </label>
-        </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
-        <div className="generate-study-day">
-          <h3>▶️ Generate a Deep Study Day</h3>
-          <button type="button" className="primary big" onClick={onStartSession}>
-            Choose subject & time → Start study timer
-          </button>
-        </div>
-
-        <div className="progress-tracking">
-          <h3>📊 Progress this week</h3>
-          <p><strong>Total study hours:</strong> {hoursThisWeek} / Goal {goalHours || '—'} h</p>
-          <p><strong>Sessions completed:</strong> {sessionsCompleted}</p>
-          <p><strong>Focus success rate:</strong> {focusRate}%</p>
-        </div>
-      </section>
-
-      {/* Exams & deadlines */}
-      <section className="dashboard-section">
-        <h2>📅 Exams & Deadlines</h2>
-        <p className="muted">Date — Course — Action (add in a future update)</p>
-        {planner.examsDeadlines.length === 0 && (
-          <p className="muted">No deadlines entered yet.</p>
-        )}
-      </section>
-
-      {/* Energy & balance */}
-      <section className="dashboard-section">
-        <h2>⚖️ Energy & Life Balance</h2>
-        <div className="energy-fields">
-          <label>Energy (1–5): <input type="number" min={1} max={5} value={planner.energyBalance.energy || ''} onChange={(e) => updateEnergy('energy', parseInt(e.target.value, 10) || 0)} /></label>
-          <label>Sleep avg: <input type="text" value={planner.energyBalance.sleepAvg} onChange={(e) => updateEnergy('sleepAvg', e.target.value)} placeholder="e.g. 7h" /></label>
-          <label>Biggest distraction: <input type="text" value={planner.energyBalance.biggestDistraction} onChange={(e) => updateEnergy('biggestDistraction', e.target.value)} /></label>
-          <label>Exercise • Spiritual • Family: <input type="text" value={planner.energyBalance.otherNotes} onChange={(e) => updateEnergy('otherNotes', e.target.value)} /></label>
-        </div>
-      </section>
-
-      {/* Weekly review */}
-      <section className="dashboard-section">
-        <h2>🔍 Weekly Review</h2>
-        <div className="review-fields">
-          <label>Wins: <textarea value={planner.review.wins} onChange={(e) => updateReview('wins', e.target.value)} rows={2} /></label>
-          <label>What was hard: <textarea value={planner.review.hard} onChange={(e) => updateReview('hard', e.target.value)} rows={2} /></label>
-          <label>What to change next week: <textarea value={planner.review.adjust} onChange={(e) => updateReview('adjust', e.target.value)} rows={2} /></label>
-          <label>Next week's focus: <textarea value={planner.review.nextFocus} onChange={(e) => updateReview('nextFocus', e.target.value)} rows={2} /></label>
-        </div>
-      </section>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <Button
+          className="h-20 text-lg text-white bg-blue-500 hover:bg-blue-600"
+          onClick={() => onNavigate('calendar')}
+        >
+          <Calendar className="mr-2 h-6 w-6" />
+          Voir mon calendrier
+        </Button>
+        <Button
+          className="h-20 text-lg text-white bg-green-500 hover:bg-green-600"
+          onClick={() => onNavigate('session')}
+        >
+          <Clock className="mr-2 h-6 w-6" />
+          Démarrer une session
+        </Button>
+      </div>
     </div>
   )
 }

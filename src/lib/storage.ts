@@ -9,13 +9,13 @@ import type {
   DailyChecklistItem,
   WeeklyReview,
   AcademicCompass,
-  ExamDeadline,
   EnergyBalance,
 } from '../types'
 
 const SUBJECTS_KEY = 'study-coach-subjects'
 const SESSIONS_KEY = 'study-coach-sessions'
 const FIXED_SCHEDULE_KEY = 'study-coach-fixed-schedule'
+const PRIORITIES_KEY = 'study-coach-priorities'
 const WEEK_PLANNER_PREFIX = 'study-coach-week-'
 
 const defaultSubjects: Subject[] = [

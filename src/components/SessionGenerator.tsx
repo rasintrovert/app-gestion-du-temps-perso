@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { Subject, SessionPlan } from '../types'
+import type { SessionPlan } from '../types'
 import { getSubjects } from '../lib/storage'
 import { generateSessionPlan } from '../lib/sessionGenerator'
 import FocusTimer from './FocusTimer'
